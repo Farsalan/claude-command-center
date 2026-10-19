@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Command Center</title>
+<meta name="description" content="Personal productivity stack — Todoist, Notion, Google Calendar, Whimsical, Obsidian, Fold, orchestrated by Claude.">
+<style>
+  :root {
+    --bg: #0a0e1a; --bg-2: #111827; --fg: #e5e7eb; --muted: #94a3b8;
+    --accent: #f59e0b; --live: #10b981; --dead: #ef4444; --pending: #64748b;
+    --card: #1f2937; --border: rgba(255,255,255,0.08);
+  }
+  @media (prefers-color-scheme: light) {
+    :root { --bg:#f8fafc; --bg-2:#eef2f7; --fg:#0f172a; --muted:#475569; --card:#fff; --border:rgba(0,0,0,0.08); }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    background: radial-gradient(ellipse at top, var(--bg-2), var(--bg));
+    color: var(--fg); min-height: 100vh; padding: 24px 16px; overflow-x: hidden;
+  }
+  .header { max-width: 920px; margin: 0 auto 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+  .title { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; }
+  .subtitle { font-size: 13px; color: var(--muted); margin-top: 2px; }
+  .status-pill { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; background: var(--card); border: 1px solid var(--border); border-radius: 999px; font-size: 12px; color: var(--muted); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--pending); }
+  .dot.live { background: var(--live); box-shadow: 0 0 8px var(--live); animation: pulse 2s infinite; }
+  .dot.dead { background: var(--dead); box-shadow: 0 0 8px var(--dead); }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+  .stage { max-width: 920px; margin: 0 auto; background: var(--card); border: 1px solid var(--border); border-radius: 20px; padding: 24px; }
+  svg { display: block; width: 100%; height: auto; }
+  .node-label { fill: var(--fg); font-size: 13px; font-weight: 600; text-anchor: middle; }
+  .node-sub { fill: var(--muted); font-size: 10px; text-anchor: middle; }
+  .node-circle { fill: var(--card); stroke: var(--pending); stroke-width: 2; transition: all 0.4s; }
+  .node-circle.live { stroke: var(--live); filter: drop-shadow(0 0 6px var(--live)); }
+  .node-circle.dead { stroke: var(--dead); filter: drop-shadow(0 0 6px var(--dead)); }
+  .center-circle { fill: var(--accent); stroke: var(--accent); opacity: 0.95; }
+  .center-ring { fill: none; stroke: var(--accent); stroke-width: 2; opacity: 0.3; animation: ring 3s infinite; }
+  @keyframes ring { 0% { r: 42; opacity: 0.5; } 100% { r: 72; opacity: 0; } }
+  .link { stroke: var(--pending); stroke-width: 1.5; fill: none; stroke-dasharray: 4 6; opacity: 0.4; transition: stroke 0.4s; }
+  .link.live { stroke: var(--live); opacity: 0.7; animation: flow 2s linear infinite; }
+  .link.dead { stroke: var(--dead); opacity: 0.7; }
+  @keyframes flow { to { stroke-dashoffset: -20; } }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin-top: 20px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px; display: flex; gap: 10px; align-items: flex-start; }
+  .card-icon { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; font-size: 18px; flex-shrink: 0; color: #fff; font-weight: 700; }
+  .card-info { min-width: 0; flex: 1; }
+  .card-name { font-size: 13px; font-weight: 600; }
+  .card-status { font-size: 11px; color: var(--muted); display: flex; align-items: center; gap: 5px; margin-top: 3px; }
+  .card-status.live { color: var(--live); }
+  .card-status.dead { color: var(--dead); }
+  .mini-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--pending); flex-shrink: 0; }
+  .mini-dot.live { background: var(--live); animation: pulse 2s infinite; }
+  .mini-dot.dead { background: var(--dead); }
+  .footer { max-width: 920px; margin: 20px auto 0; text-align: center; font-size: 11px; color: var(--muted); line-height: 1.6; }
+  .footer a { color: var(--accent); text-decoration: none; }
+  @media (max-width: 600px) { .stage { padding: 12px; } .title { font-size: 18px; } }
+</style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <div class="title">Command Center</div>
+      <div class="subtitle">Personal productivity stack · <span id="lastUpdated">—</span></div>
+    </div>
+    <div class="status-pill"><span class="dot" id="globalDot"></span><span id="globalLabel">Loading…</span></div>
+  </div>
+
+  <div class="stage">
+    <svg viewBox="0 0 800 500" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <radialGradient id="centerGlow" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stop-color="#f59e0b" stop-opacity="0.4"/>
+          <stop offset="100%" stop-color="#f59e0b" stop-opacity="0"/>
+        </radialGradient>
+      </defs>
+      <circle cx="400" cy="250" r="100" fill="url(#centerGlow)"/>
+      <circle class="center-ring" cx="400" cy="250" r="42"/>
+      <circle class="center-ring" cx="400" cy="250" r="42" style="animation-delay: 1s;"/>
+
+      <path class="link" id="link-todoist" d="M 400 250 Q 300 150 180 110"/>
+      <path class="link" id="link-notion" d="M 400 250 Q 500 150 620 110"/>
+      <path class="link" id="link-obsidian" d="M 400 250 Q 250 250 100 250"/>
+      <path class="link" id="link-calendar" d="M 400 250 Q 550 250 700 250"/>
+      <path class="link" id="link-whimsical" d="M 400 250 Q 300 350 180 390"/>
+      <path class="link" id="link-fold" d="M 400 250 Q 500 350 620 390"/>
+
+      <g><circle class="node-circle" id="node-todoist" cx="180" cy="110" r="38"/><text x="180" y="114" class="node-label">✓</text><text x="180" y="165" class="node-label">Todoist</text><text x="180" y="180" class="node-sub">Execution</text></g>
+      <g><circle class="node-circle" id="node-notion" cx="620" cy="110" r="38"/><text x="620" y="114" class="node-label">N</text><text x="620" y="165" class="node-label">Notion</text><text x="620" y="180" class="node-sub">Strategy</text></g>
+      <g><circle class="node-circle" id="node-obsidian" cx="100" cy="250" r="38"/><text x="100" y="254" class="node-label">◆</text><text x="100" y="305" class="node-label">Obsidian</text><text x="100" y="320" class="node-sub">Knowledge</text></g>
+      <g><circle class="node-circle" id="node-calendar" cx="700" cy="250" r="38"/><text x="700" y="256" class="node-label">📅</text><text x="700" y="305" class="node-label">Calendar</text><text x="700" y="320" class="node-sub">Time</text></g>
+      <g><circle class="node-circle" id="node-whimsical" cx="180" cy="390" r="38"/><text x="180" y="396" class="node-label">◰</text><text x="180" y="445" class="node-label">Whimsical</text><text x="180" y="460" class="node-sub">Visual</text></g>
+      <g><circle class="node-circle" id="node-fold" cx="620" cy="390" r="38"/><text x="620" y="398" class="node-label">₹</text><text x="620" y="445" class="node-label">Fold</text><text x="620" y="460" class="node-sub">Finance</text></g>
+
+      <circle class="center-circle" cx="400" cy="250" r="42"/>
+      <text x="400" y="248" class="node-label" style="fill:#0a0e1a; font-size:16px;">Claude</text>
+      <text x="400" y="265" class="node-sub" style="fill:#0a0e1a; opacity:0.7;">COO</text>
+    </svg>
+
+    <div class="grid">
+      <div class="card"><div class="card-icon" style="background:#dc3f31;">✓</div><div class="card-info"><div class="card-name">Todoist</div><div class="card-status" id="status-todoist"><span class="mini-dot"></span>—</div></div></div>
+      <div class="card"><div class="card-icon" style="background:#000;">N</div><div class="card-info"><div class="card-name">Notion</div><div class="card-status" id="status-notion"><span class="mini-dot"></span>—</div></div></div>
+      <div class="card"><div class="card-icon" style="background:#4285f4;">📅</div><div class="card-info"><div class="card-name">Google Calendar</div><div class="card-status" id="status-calendar"><span class="mini-dot"></span>—</div></div></div>
+      <div class="card"><div class="card-icon" style="background:#7b61ff;">◰</div><div class="card-info"><div class="card-name">Whimsical</div><div class="card-status" id="status-whimsical"><span class="mini-dot"></span>—</div></div></div>
+      <div class="card"><div class="card-icon" style="background:#f59e0b;">₹</div><div class="card-info"><div class="card-name">Fold Money</div><div class="card-status" id="status-fold"><span class="mini-dot"></span>—</div></div></div>
+      <div class="card"><div class="card-icon" style="background:#8b5cf6;">◆</div><div class="card-info"><div class="card-name">Obsidian</div><div class="card-status" id="status-obsidian"><span class="mini-dot"></span>—</div></div></div>
+    </div>
+  </div>
+
+  <div class="footer">
+    Status updated daily by a Claude scheduled task that commits <code>status.json</code> to this repo.<br/>
+    Live interactive version lives on <a href="https://claude.ai">claude.ai</a> — this page is the public snapshot.
+  </div>
+
+<script>
+(async () => {
+  const nodes = ['todoist','notion','calendar','whimsical','fold','obsidian'];
+  const names = { todoist:'Todoist', notion:'Notion', calendar:'Google Calendar', whimsical:'Whimsical', fold:'Fold', obsidian:'Obsidian' };
+
+  function setStatus(id, state, when) {
+    const node = document.getElementById('node-' + id);
+    const link = document.getElementById('link-' + id);
+    const st   = document.getElementById('status-' + id);
+    if (node) { node.classList.remove('live','dead'); if (state) node.classList.add(state); }
+    if (link) { link.classList.remove('live','dead'); if (state) link.classList.add(state); }
+    if (st) {
+      st.classList.remove('live','dead');
+      if (state) st.classList.add(state);
+      const label = state === 'live' ? ('Live' + (when ? ' · ' + when : ''))
+                  : state === 'dead' ? ('Broken' + (when ? ' · ' + when : ''))
+                  : 'No data';
+      st.innerHTML = `<span class="mini-dot ${state||''}"></span>${label}`;
+    }
+  }
+
+  try {
+    const res = await fetch('status.json', { cache: 'no-store' });
+    if (!res.ok) throw new Error('no status.json');
+    const data = await res.json();
+    const checkedAt = data.checkedAt ? new Date(data.checkedAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short' }) : '';
+    document.getElementById('lastUpdated').textContent = checkedAt ? ('Last check: ' + checkedAt) : 'No status yet';
+
+    let live = 0, dead = 0;
+    for (const id of nodes) {
+      const s = (data.connections || {})[id];
+      if (!s) { setStatus(id, null); continue; }
+      setStatus(id, s.status === 'ok' ? 'live' : 'dead');
+      if (s.status === 'ok') live++; else dead++;
+    }
+    const gd = document.getElementById('globalDot');
+    const gl = document.getElementById('globalLabel');
+    if (dead > 0) { gd.classList.add('dead'); gl.textContent = `${dead} broken`; }
+    else if (live > 0) { gd.classList.add('live'); gl.textContent = `${live} live`; }
+    else { gl.textContent = 'Awaiting first check'; }
+  } catch (e) {
+    document.getElementById('lastUpdated').textContent = 'Waiting for first daily check';
+    document.getElementById('globalLabel').textContent = 'No data yet';
+    for (const id of nodes) setStatus(id, null);
+  }
+})();
+</script>
+</body>
+</html>

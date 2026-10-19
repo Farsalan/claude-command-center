@@ -1,0 +1,11 @@
+{
+  "checkedAt": null,
+  "connections": {
+    "todoist":   { "status": "unknown" },
+    "notion":    { "status": "unknown" },
+    "calendar":  { "status": "unknown" },
+    "whimsical": { "status": "unknown" },
+    "fold":      { "status": "unknown" },
+    "obsidian":  { "status": "unknown" }
+  }
+}
